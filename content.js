@@ -20,6 +20,14 @@ async function checkLibraryAvailability(author, title) {
     });
 }
 
+// Helper function to create a loading spinner
+function createLoadingSpinner() {
+    const spinner = document.createElement('span');
+    spinner.classList.add('loading-spinner');
+    spinner.textContent = '⏳'; // Simple spinner icon, replace with CSS spinner if needed
+    return spinner;
+}
+
 // Helper function to format author name: "Last, First" to "First Last"
 function formatAuthorName(author) {
     const parts = author.split(',');
@@ -43,6 +51,62 @@ function getCleanedTitle(element) {
     return title;
 }
 
+// Function to handle a new row in the book list table
+async function handleNewRow(row) {
+    const titleCell = row.querySelector('.field.title .value');
+    const authorCell = row.querySelector('.field.author .value');
+
+    if (titleCell && authorCell) {
+        const title = getCleanedTitle(titleCell);
+        const author = formatAuthorName(authorCell.textContent.trim());
+
+        const existsCell = document.createElement('td');
+        existsCell.classList.add('exists-column');
+        existsCell.style.textAlign = 'center';
+
+        // Add loading spinner
+        const spinner = createLoadingSpinner();
+        existsCell.appendChild(spinner);
+        row.appendChild(existsCell);
+
+        try {
+            const isAvailable = await checkLibraryAvailability(author, title);
+            existsCell.removeChild(spinner); // Remove spinner when result is ready
+
+            // Add availability icon and link
+            const queryUrl = `https://prism.librarymanagementcloud.co.uk/liverpool/items?query=+author%3A%28${encodeURIComponent(author)}%29+AND+title%3A%28%22${encodeURIComponent(title)}%22%29+AND+format%3A%28book%29`;
+            const link = document.createElement('a');
+            link.href = queryUrl;
+            link.target = '_blank';
+            link.textContent = isAvailable ? '✅' : '❌';
+
+            existsCell.appendChild(link);
+        } catch (error) {
+            console.error('Error checking availability:', error);
+            existsCell.textContent = '❌'; // Indicate failure
+        }
+    }
+}
+
+// Function to initialize the observer for dynamically added rows
+function observeDynamicRows() {
+    const tableBody = document.querySelector('#books tbody');
+    if (!tableBody) return;
+
+    // MutationObserver to detect new rows in the table
+    const observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+            mutation.addedNodes.forEach((node) => {
+                if (node.nodeName === 'TR') {
+                    handleNewRow(node); // Process each new row added to the table
+                }
+            });
+        });
+    });
+
+    observer.observe(tableBody, { childList: true });
+}
+
 // Function to handle the Goodreads book list page
 function handleBookListPage() {
     const table = document.querySelector('#books');
@@ -58,36 +122,12 @@ function handleBookListPage() {
     existsHeader.textContent = 'Exists';
     headerRow.appendChild(existsHeader);
 
+    // Process existing rows initially
     const rows = table.querySelectorAll('tbody tr');
-    rows.forEach(async (row) => {
-        const titleCell = row.querySelector('.field.title .value');
-        const authorCell = row.querySelector('.field.author .value');
+    rows.forEach((row) => handleNewRow(row));
 
-        if (titleCell && authorCell) {
-            const title = getCleanedTitle(titleCell);
-            const author = formatAuthorName(authorCell.textContent.trim());
-
-            try {
-                const isAvailable = await checkLibraryAvailability(author, title);
-
-                const existsCell = document.createElement('td');
-                existsCell.classList.add('exists-column');
-                existsCell.style.textAlign = 'center';
-
-                const queryUrl = `https://prism.librarymanagementcloud.co.uk/liverpool/items?query=+author%3A%28${encodeURIComponent(author)}%29+AND+title%3A%28%22${encodeURIComponent(title)}%22%29+AND+format%3A%28book%29`;
-                const link = document.createElement('a');
-                link.href = queryUrl;
-                link.target = '_blank';
-                link.textContent = isAvailable ? '✅' : '❌';
-
-                existsCell.appendChild(link);
-                row.appendChild(existsCell);
-
-            } catch (error) {
-                console.error('Error checking availability:', error);
-            }
-        }
-    });
+    // Set up observer for dynamically added rows
+    observeDynamicRows();
 }
 
 // Function to handle the Goodreads individual book page
@@ -108,12 +148,18 @@ async function handleBookDetailPage() {
     }
     const author = authorElement.textContent.trim();
 
+    // Add loading spinner
+    const existsElement = document.createElement('div');
+    existsElement.classList.add('ContributorLink'); // Match author styling
+    existsElement.style.display = 'block'; // Place on a new line
+
+    const spinner = createLoadingSpinner();
+    existsElement.appendChild(spinner);
+    authorElement.closest('.ContributorLinksList').appendChild(existsElement);
+
     try {
         const isAvailable = await checkLibraryAvailability(author, title);
-
-        const existsElement = document.createElement('div');
-        existsElement.classList.add('ContributorLink'); // Match author styling
-        existsElement.style.display = 'block'; // Place on a new line
+        existsElement.removeChild(spinner); // Remove spinner when result is ready
 
         const statusLink = document.createElement('a');
         statusLink.classList.add('ContributorLink__name'); // Style similar to author
@@ -123,12 +169,9 @@ async function handleBookDetailPage() {
         statusLink.textContent = isAvailable ? '✅ Exists In Liverpool Library Catalogue' : '❌ Not Available in Liverpool Library Catalogue';
 
         existsElement.appendChild(statusLink);
-
-        // Insert the "Exists" element below the author section
-        authorElement.closest('.ContributorLinksList').appendChild(existsElement);
-
     } catch (error) {
         console.error("Error checking availability:", error);
+        existsElement.textContent = '❌ Error';
     }
 }
 
