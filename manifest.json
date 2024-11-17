@@ -4,11 +4,8 @@
   "version": "1.0",
   "description": "Check if books are available in the library",
   "permissions": [
-    "activeTab",
-    "storage",
     "runtime",
-    "declarative_net_request",
-    "webRequest"
+    "declarative_net_request"
   ],
   "host_permissions": [
     "*://prism.librarymanagementcloud.co.uk/*"
