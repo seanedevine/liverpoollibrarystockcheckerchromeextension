@@ -1,14 +1,15 @@
 {
   "manifest_version": 3,
   "name": "Goodreads Library Checker",
-  "version": "1.0",
+  "version": "2.0",
   "description": "Check if books are available in the library",
   "permissions": [
     "runtime",
     "declarative_net_request"
   ],
   "host_permissions": [
-    "*://prism.librarymanagementcloud.co.uk/*"
+    "*://prism.librarymanagementcloud.co.uk/*",
+    "*://thunder.api.overdrive.com/*"
   ],
   "background": {
     "service_worker": "background.js"

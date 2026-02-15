@@ -20,6 +20,28 @@ async function checkLibraryAvailability(author, title) {
     });
 }
 
+// Function to send a request to background.js and get Libby ebook availability
+async function checkLibbyAvailability(author, title) {
+    return new Promise((resolve, reject) => {
+        console.log('Attempting to send Libby check message to background script...');
+        chrome.runtime.sendMessage(
+            {
+                type: 'checkLibbyAvailability',
+                author,
+                title
+            },
+            (response) => {
+                console.log('Libby response received from background script:', response);
+                if (response && response.isAvailable !== undefined) {
+                    resolve(response.isAvailable);
+                } else {
+                    reject('No response or invalid response from background script (Libby)');
+                }
+            }
+        );
+    });
+}
+
 // Helper function to create a loading spinner
 function createLoadingSpinner() {
     const spinner = document.createElement('span');
@@ -60,20 +82,29 @@ async function handleNewRow(row) {
         const title = getCleanedTitle(titleCell);
         const author = formatAuthorName(authorCell.textContent.trim());
 
+        // Library catalogue column
         const existsCell = document.createElement('td');
         existsCell.classList.add('exists-column');
         existsCell.style.textAlign = 'center';
 
-        // Add loading spinner
         const spinner = createLoadingSpinner();
         existsCell.appendChild(spinner);
         row.appendChild(existsCell);
 
+        // Libby ebook column
+        const libbyCell = document.createElement('td');
+        libbyCell.classList.add('libby-column');
+        libbyCell.style.textAlign = 'center';
+
+        const libbySpinner = createLoadingSpinner();
+        libbyCell.appendChild(libbySpinner);
+        row.appendChild(libbyCell);
+
+        // Check library catalogue
         try {
             const isAvailable = await checkLibraryAvailability(author, title);
-            existsCell.removeChild(spinner); // Remove spinner when result is ready
+            existsCell.removeChild(spinner);
 
-            // Add availability icon and link
             const queryUrl = `https://prism.librarymanagementcloud.co.uk/liverpool/items?query=+author%3A%28${encodeURIComponent(author)}%29+AND+title%3A%28%22${encodeURIComponent(title)}%22%29+AND+format%3A%28book%29`;
             const link = document.createElement('a');
             link.href = queryUrl;
@@ -83,7 +114,25 @@ async function handleNewRow(row) {
             existsCell.appendChild(link);
         } catch (error) {
             console.error('Error checking availability:', error);
-            existsCell.textContent = '❌'; // Indicate failure
+            existsCell.textContent = '❌';
+        }
+
+        // Check Libby ebook availability
+        try {
+            const isAvailable = await checkLibbyAvailability(author, title);
+            libbyCell.removeChild(libbySpinner);
+
+            const searchQuery = `${title} ${author}`;
+            const libbyUrl = `https://libbyapp.com/search/liverpool/search/query-${encodeURIComponent(searchQuery)}/format-ebook_kindle,ebook_epub_adobe,ebook_epub_open,ebook_pdf_adobe,ebook_pdf_open,ebook_overdrive/page-1`;
+            const link = document.createElement('a');
+            link.href = libbyUrl;
+            link.target = '_blank';
+            link.textContent = isAvailable ? '✅' : '❌';
+
+            libbyCell.appendChild(link);
+        } catch (error) {
+            console.error('Error checking Libby availability:', error);
+            libbyCell.textContent = '❌';
         }
     }
 }
@@ -119,8 +168,12 @@ function handleBookListPage() {
     }
 
     const existsHeader = document.createElement('th');
-    existsHeader.textContent = 'Exists';
+    existsHeader.textContent = 'Library';
     headerRow.appendChild(existsHeader);
+
+    const libbyHeader = document.createElement('th');
+    libbyHeader.textContent = 'Libby';
+    headerRow.appendChild(libbyHeader);
 
     // Process existing rows initially
     const rows = table.querySelectorAll('tbody tr');
@@ -157,12 +210,21 @@ async function handleBookDetailPage() {
     existsElement.appendChild(spinner);
     authorElement.closest('.ContributorLinksList').appendChild(existsElement);
 
+    // Add Libby loading element
+    const libbyElement = document.createElement('div');
+    libbyElement.classList.add('ContributorLink');
+    libbyElement.style.display = 'block';
+
+    const libbySpinner = createLoadingSpinner();
+    libbyElement.appendChild(libbySpinner);
+    authorElement.closest('.ContributorLinksList').appendChild(libbyElement);
+
     try {
         const isAvailable = await checkLibraryAvailability(author, title);
-        existsElement.removeChild(spinner); // Remove spinner when result is ready
+        existsElement.removeChild(spinner);
 
         const statusLink = document.createElement('a');
-        statusLink.classList.add('ContributorLink__name'); // Style similar to author
+        statusLink.classList.add('ContributorLink__name');
         statusLink.style.fontWeight = 'bold';
         statusLink.href = `https://prism.librarymanagementcloud.co.uk/liverpool/items?query=+author%3A%28${encodeURIComponent(author)}%29+AND+title%3A%28%22${encodeURIComponent(title)}%22%29+AND+format%3A%28book%29`;
         statusLink.target = '_blank';
@@ -172,6 +234,25 @@ async function handleBookDetailPage() {
     } catch (error) {
         console.error("Error checking availability:", error);
         existsElement.textContent = '❌ Error';
+    }
+
+    // Check Libby ebook availability
+    try {
+        const isAvailable = await checkLibbyAvailability(author, title);
+        libbyElement.removeChild(libbySpinner);
+
+        const searchQuery = `${title} ${author}`;
+        const libbyLink = document.createElement('a');
+        libbyLink.classList.add('ContributorLink__name');
+        libbyLink.style.fontWeight = 'bold';
+        libbyLink.href = `https://libbyapp.com/search/liverpool/search/query-${encodeURIComponent(searchQuery)}/format-ebook_kindle,ebook_epub_adobe,ebook_epub_open,ebook_pdf_adobe,ebook_pdf_open,ebook_overdrive/page-1`;
+        libbyLink.target = '_blank';
+        libbyLink.textContent = isAvailable ? '✅ Available as eBook/Audiobook on Libby' : '❌ Not Available on Libby';
+
+        libbyElement.appendChild(libbyLink);
+    } catch (error) {
+        console.error("Error checking Libby availability:", error);
+        libbyElement.textContent = '❌ Libby Error';
     }
 }
 

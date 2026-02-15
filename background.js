@@ -26,4 +26,34 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     return true; // Keep this return to indicate async response
   }
+
+  if (message.type === 'checkLibbyAvailability') {
+    const { author, title } = message;
+    const searchQuery = `${title} ${author}`;
+    const queryUrl = `https://thunder.api.overdrive.com/v2/libraries/liverpool/media?query=${encodeURIComponent(searchQuery)}&format=ebook-overdrive,ebook-media-do,ebook-overdrive-provisional&perPage=24&page=1&truncateDescription=false&includedFacets=availability&includedFacets=mediaTypes&includedFacets=formats&includedFacets=maturityLevels&includedFacets=subjects&includedFacets=languages&includedFacets=boolean&includedFacets=addedDates&includedFacets=freshStart&x-client-id=dewey`;
+
+    console.log('Querying Libby URL:', queryUrl);
+
+    fetch(queryUrl)
+        .then(response => response.json())
+        .then(data => {
+          // Normalize title for comparison (lowercase, remove punctuation)
+          const normalizeTitle = (t) => t.toLowerCase().replace(/[^\w\s]/g, '').trim();
+          const searchedTitle = normalizeTitle(title);
+          
+          // Check if any returned item has a matching title
+          const hasMatchingTitle = data.items && data.items.some(item => {
+            const itemTitle = normalizeTitle(item.title || '');
+            return itemTitle === searchedTitle || itemTitle.includes(searchedTitle) || searchedTitle.includes(itemTitle);
+          });
+          
+          sendResponse({ isAvailable: hasMatchingTitle });
+        })
+        .catch(error => {
+          console.error('Error fetching data from Libby/OverDrive API:', error);
+          sendResponse({ isAvailable: false });
+        });
+
+    return true;
+  }
 });
